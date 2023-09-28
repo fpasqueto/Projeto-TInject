@@ -179,9 +179,9 @@ type
     procedure SendPool(vGroupID, vTitle, vSurvey: string);
     procedure CheckDelivered;
     procedure SendContact(vNumDest, vNum:string; vNameContact: string = '');
-    procedure SendBase64(vBase64, vNum, vFileName, vText:string);
+    procedure SendBase64(vBase64: string; vNum: string; vFileName: string; vText: string = '');
     procedure SendLinkPreview(vNum, vLinkPreview, vText: string);
-    procedure SendLocation(vNum, vLat, vLng, vText: string);
+    procedure SendLocation(vNum, vLat, vLng, vName, vAddress: string);
     procedure Logout();
     procedure ReloaderWeb;
     procedure StopWebBrowser;
@@ -775,11 +775,12 @@ begin
   Chromium1.OnTitleChange           := nil;
 end;
 
-procedure TFrmConsole.SendBase64(vBase64, vNum, vFileName, vText: string);
+procedure TFrmConsole.SendBase64(vBase64: string; vNum: string; vFileName: string; vText: string = '');
 var
   Ljs, LLine: string;
   LBase64: TStringList;
   i: integer;
+  LMime: string;
 begin
   if not FConectado then
     raise Exception.Create(MSG_ConfigCEF_ExceptConnetServ);
@@ -787,11 +788,14 @@ begin
   vText           := CaractersWeb(vText);
   vFileName       := ExtractFileName(vFileName); //AjustNameFile(vFileName) Alterado em 20/02/2020 by Lucas
   LBase64         := TStringList.Create;
-  TRY
+  try
+    //vBase64 := FileToBase64_(trim(vBase64));
     LBase64.Text := vBase64;
+
     for i := 0 to LBase64.Count -1  do
        LLine := LLine + LBase64[i];
     vBase64 := LLine;
+
 
     //LJS := FrmConsole_JS_VAR_SendTyping + FrmConsole_JS_VAR_SendBase64;
     LJS := FrmConsole_JS_VAR_SendBase64;
@@ -799,10 +803,12 @@ begin
     FrmConsole_JS_AlterVar(LJS, '#MSG_NOMEARQUIVO#', Trim(vFileName));
     FrmConsole_JS_AlterVar(LJS, '#MSG_CORPO#',       Trim(vText));
     FrmConsole_JS_AlterVar(LJS, '#MSG_BASE64#',      Trim(vBase64));
+    //FrmConsole_JS_AlterVar(LJS, '#MSG_BASE64#',      vBase64);
+
     ExecuteJS(LJS, True);
-  FINALLY
+  finally
     freeAndNil(LBase64);
-  END;
+  end;
 end;
 
 procedure TFrmConsole.SendButtons(phoneNumber, titleText, buttons, footerText,
@@ -851,7 +857,6 @@ begin
   if not FConectado then
     raise Exception.Create(MSG_ConfigCEF_ExceptConnetServ);
 
-  //LJS   := FrmConsole_JS_VAR_SendTyping + FrmConsole_JS_VAR_SendContact;
   LJS   := FrmConsole_JS_VAR_SendContact;
   FrmConsole_JS_AlterVar(LJS, '#MSG_PHONE_DEST#',       Trim(vNumDest));
   FrmConsole_JS_AlterVar(LJS, '#MSG_PHONE#',            Trim(vNum));
@@ -874,20 +879,22 @@ begin
   ExecuteJS(LJS, true);
 end;
 
-procedure TFrmConsole.SendLocation(vNum, vLat, vLng, vText: string);
+procedure TFrmConsole.SendLocation(vNum, vLat, vLng, vName, vAddress: string);
 var
   Ljs: string;
 begin
   if not FConectado then
     raise Exception.Create(MSG_ConfigCEF_ExceptConnetServ);
 
-  vText := CaractersWeb(vText);
-  //LJS   := FrmConsole_JS_VAR_SendTyping + FrmConsole_JS_VAR_SendLocation;
+  vName     := CaractersWeb(vName);
+  vAddress  := CaractersWeb(vAddress);
+
   LJS   := FrmConsole_JS_VAR_SendLocation;
   FrmConsole_JS_AlterVar(LJS, '#MSG_PHONE#',     Trim(vNum));
   FrmConsole_JS_AlterVar(LJS, '#MSG_LAT#',       Trim(vLat));
   FrmConsole_JS_AlterVar(LJS, '#MSG_LNG#',       Trim(vLng));
-  FrmConsole_JS_AlterVar(LJS, '#MSG_CORPO#',     Trim(vText));
+  FrmConsole_JS_AlterVar(LJS, '#MSG_NAME#',      Trim(vName));
+  FrmConsole_JS_AlterVar(LJS, '#MSG_ADDRESS#',   Trim(vAddress));
   ExecuteJS(LJS, true);
 end;
 
@@ -1135,6 +1142,16 @@ begin
                           End;
 
     Th_getUnreadMessages: begin
+                            LOutClass := TChatList.Create(LResultStr);
+                            try
+                              SendNotificationCenterDirect(PResponse.TypeHeader, LOutClass);
+                            finally
+                              FreeAndNil(LOutClass);
+                            end;
+                            FgettingChats := False;
+                          end;
+
+    Th_getUnreadMessagesFromMe: begin
                             LOutClass := TChatList.Create(LResultStr);
                             try
                               SendNotificationCenterDirect(PResponse.TypeHeader, LOutClass);

@@ -55,6 +55,7 @@ type
   TOnGetCheckIsValidNumber  = Procedure(Sender : TObject; Number: String;  IsValid: Boolean) of object;
   TOnGetProfilePicThumb     = Procedure(Sender : TObject; Base64: String) of object;
   TGetUnReadMessages        = procedure(Const Chats: TChatList) of object;
+  TGetUnReadMessagesFromMe  = procedure(Const Chats: TChatList) of object;
   TOnGetQrCode              = procedure(Const Sender: Tobject; Const QrCode: TResultQRCodeClass) of object;
   TOnAllContacts            = procedure(Const AllContacts: TRetornoAllContacts) of object;
   TOnAllGroups              = procedure(Const AllGroups: TRetornoAllGroups) of object;
@@ -107,6 +108,7 @@ type
   protected
     { Protected declarations }
     FOnGetUnReadMessages        : TGetUnReadMessages;
+    FOnGetUnReadMessagesFromMe  : TGetUnReadMessagesFromMe;
     FOnGetAllGroupContacts      : TOnAllGroupContacts;
     FOnGetAllContactList        : TOnAllContacts;
     FOnGetAllGroupList          : TOnAllGroups;
@@ -153,11 +155,11 @@ type
     procedure SendButtonList(phoneNumber: string; titleText1: string; titleText2: string; titleButton: string; options: string; etapa: string = '');
     procedure sendPool(PGroupID, PTitle, PSurvey: string);
     procedure deleteConversation(PNumberPhone: string);
-    procedure SendContact(PNumberPhone, PNumber: string; PNameContact: string = '');
+    procedure SendContact(PPhoneDestiny, PPhoneContact: string; PNameContact: string = '');
     procedure SendFile(PNumberPhone: String; Const PFileName: String; PMessage: string = '');
     procedure SendBase64(Const vBase64: String; vNum: String;  Const vFileName, vMess: string);     deprecated; //Versao 1.0.2.0 disponivel ate Versao 1.0.6.0
     procedure SendLinkPreview(PNumberPhone, PVideoLink, PMessage: string);
-    procedure SendLocation(PNumberPhone, PLat, PLng, PMessage: string);
+    procedure SendLocation(PNumberPhone, PLat, PLng, PName, PAddress: string);
     procedure Logtout();
     procedure GetBatteryStatus;
     procedure CheckIsValidNumber(PNumberPhone: string);
@@ -221,6 +223,7 @@ type
     property OnGetQrCode                 : TOnGetQrCode               read FOnGetQrCode                    write FOnGetQrCode;
     property OnGetChatList               : TGetUnReadMessages         read FOnGetChatList                  write FOnGetChatList;
     property OnGetUnReadMessages         : TGetUnReadMessages         read FOnGetUnReadMessages            write FOnGetUnReadMessages;
+    property OnGetUnReadMessagesFromMe   : TGetUnReadMessagesFromMe   read FOnGetUnReadMessagesFromMe      write FOnGetUnReadMessagesFromMe;
     property OnGetAllGroupContacts       : TOnAllGroupContacts        read FOnGetAllGroupContacts          write FOnGetAllGroupContacts;
     property OnGetStatus                 : TNotifyEvent               read FOnGetStatus                    write FOnGetStatus;
     property OnGetBatteryLevel           : TNotifyEvent               read FOnGetBatteryLevel              write FOnGetBatteryLevel;
@@ -1081,7 +1084,7 @@ begin
   end;
 
 
-  if (PTypeHeader In [Th_GetAllChats, Th_getUnreadMessages]) then
+  if (PTypeHeader In [Th_GetAllChats, Th_getUnreadMessages, Th_getUnreadMessagesFromMe]) then
   Begin
     if not Assigned(PReturnClass) then
       raise Exception.Create(MSG_ExceptMisc + ' in Int_OnNotificationCenter' );
@@ -1096,6 +1099,13 @@ begin
     Begin
       if Assigned(OnGetUnReadMessages) then
          OnGetUnReadMessages(TChatList(PReturnClass));
+
+    end;
+
+    If PTypeHeader = Th_getUnreadMessagesFromMe Then
+    Begin
+      if Assigned(OnGetUnReadMessagesFromMe) then
+         OnGetUnReadMessagesFromMe(TChatList(PReturnClass));
 
     end;
 
@@ -1342,9 +1352,8 @@ begin
   lThread.Start;
 end;
 
-
 procedure TInject.SendFile(PNumberPhone: string;
-  const PFileName: String; PMessage: string);
+  const PFileName: String; PMessage: string = '');
 var
   lThread     : TThread;
   LStream     : TMemoryStream;
@@ -1373,6 +1382,7 @@ begin
 
   LStream     := TMemoryStream.Create;
   LBase64File := TBase64Encoding.Create;
+
   try
     try
       LStream.LoadFromFile(PFileName);
@@ -1404,6 +1414,8 @@ begin
           begin
             FrmConsole.ReadMessages(PNumberPhone); //Marca como lida a mensagem
             FrmConsole.sendBase64(LBase64, PNumberPhone, PFileName, PMessage);
+            //FrmConsole.sendBase64(PFileName, PNumberPhone, PFileName, PMessage);
+
           end;
         end);
       end);
@@ -1460,7 +1472,7 @@ begin
 
 end;
 
-procedure TInject.SendLocation(PNumberPhone, PLat, PLng, PMessage: string);
+procedure TInject.SendLocation(PNumberPhone, PLat, PLng, PName, PAddress: string);
 var
   lThread : TThread;
 begin
@@ -1476,11 +1488,11 @@ begin
     Exit;
   end;
 
-  if Trim(PMessage) = '' then
-  begin
-    Int_OnErroInterno(Self, MSG_WarningNothingtoSend, PNumberPhone);
-    Exit;
-  end;
+//  if Trim(PMessage) = '' then
+//  begin
+//    Int_OnErroInterno(Self, MSG_WarningNothingtoSend, PNumberPhone);
+//    Exit;
+//  end;
 
   if (Trim(PLat) = '') or (Trim(PLng) = '') then
   begin
@@ -1498,7 +1510,7 @@ begin
           if Assigned(FrmConsole) then
           begin
             FrmConsole.ReadMessages(PNumberPhone); //Marca como lida a mensagem
-            FrmConsole.sendLocation(PNumberPhone, PLat, PLng, PMessage);
+            FrmConsole.sendLocation(PNumberPhone, PLat, PLng, PName, PAddress);
           end;
         end);
 
@@ -1690,7 +1702,7 @@ begin
 
 end;
 
-procedure TInject.SendContact(PNumberPhone, PNumber: string; PNameContact: string = '');
+procedure TInject.SendContact(PPhoneDestiny, PPhoneContact: string; PNameContact: string = '');
 var
   lThread : TThread;
 begin
@@ -1699,17 +1711,17 @@ begin
   if not Assigned(FrmConsole) then
      Exit;
 
-  PNumberPhone := AjustNumber.FormatIn(PNumberPhone);
+  PPhoneDestiny := AjustNumber.FormatIn(PPhoneDestiny);
 
-  if (pos('@', PNumberPhone) = 0) then
+  if (pos('@', PPhoneDestiny) = 0) then
   Begin
-    Int_OnErroInterno(Self, MSG_ExceptPhoneNumberError, PNumberPhone);
+    Int_OnErroInterno(Self, MSG_ExceptPhoneNumberError, PPhoneDestiny);
     Exit;
   end;
 
-  if Trim(PNumber) = '' then
+  if Trim(PPhoneContact) = '' then
   begin
-    Int_OnErroInterno(Self, MSG_WarningNothingtoSend, PNumberPhone);
+    Int_OnErroInterno(Self, MSG_WarningNothingtoSend, PPhoneContact);
     Exit;
   end;
 
@@ -1722,7 +1734,7 @@ begin
         begin
           if Assigned(FrmConsole) then
           begin
-            FrmConsole.SendContact(PNumberPhone, PNumber, PNameContact);
+            FrmConsole.SendContact(PPhoneDestiny, PPhoneContact, PNameContact);
           end;
         end);
 
@@ -1979,9 +1991,16 @@ begin
     Disconnect;
     LForm.close;
   finally
-    FreeAndNil(LForm);
-    //FreeAndNil(GlobalCEFApp);
-    //if CallTerminateProcs then PostQuitMessage(0);
+    if assigned(LForm) then
+      FreeAndNil(LForm);
+    sleepNoFreeze(5000);
+    if assigned(GlobalCEFApp) then
+      FreeAndNil(GlobalCEFApp);
+    sleepNoFreeze(5000);
+    try
+      if CallTerminateProcs then PostQuitMessage(0);
+    except
+    end
   end
 end;
 
